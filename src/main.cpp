@@ -21,11 +21,11 @@
 
 EasyOTA OTA(ARDUINO_HOSTNAME);
 DiffDrive ddrive(MOTOR_A0, MOTOR_B0, MOTOR_A1, MOTOR_B1, WHEEL_BASE);
-bool connected = false;
-unsigned long last_updated = 0;
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 ADNS3080 a3080(SS, RESET);
+bool connected = false;
+unsigned long last_updated = 0;
 
 void textThem(const char * text) {
 	int tryId = 0;
@@ -47,13 +47,6 @@ void S_printf(const char * format, ...) {
 //	va_end (args);
 }
 
-void read_image(byte * data, size_t size)
-{
-	a3080.frame_capture(data);
-	data[40] = 40;
-	data[41] = 70;
-	data[42] = 128;
-}
 
 void setup() {
 	//Serial.begin(115200);
@@ -107,7 +100,7 @@ void loop() {
 
 	if (now - last_now > 20L && connected) {
 		static byte data[IMG_WIDTH * IMG_HEIGHT];
-		read_image(data, sizeof(data));
+		a3080.frame_capture(data);
 		float voltage = analogRead(0) * 10.0 / 1024.0;
 
 		//
