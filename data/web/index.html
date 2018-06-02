@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>ESP Wheelie</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="description" content="ESP8266 four wheel differential drive toy controller with A3080 mouse sensor as camera">
+	<meta name="author" content="FoxIS <andrius.mikonis@gmail.com">
+</head>
+
+<body onload="onload()">
+<canvas id="view" width="500" height="550"></canvas>
+
+<script>
+var ws = null;
+var mousedown = null;
+var mouse = null;
+var control = {
+	power: 0,
+	steering: 0
+};
+var canvas;
+
+function onload() {
+	ws_connect(get_url('ws'));
+	canvas = document.getElementById("view");
+
+	canvas.addEventListener('mousedown', mouse_down);
+	canvas.addEventListener('mouseup', mouse_up);
+	canvas.addEventListener('mousemove', mouse_move);
+
+	canvas.addEventListener("touchstart", function (e) {
+    mousePos = getTouchPos(canvas, e);
+	  var touch = e.touches[0];
+	  var mouseEvent = new MouseEvent("mousedown", {
+	    clientX: touch.clientX,
+	    clientY: touch.clientY
+	  });
+	  canvas.dispatchEvent(mouseEvent);
+	}, false);
+	canvas.addEventListener("touchend", function (e) {
+	  var mouseEvent = new MouseEvent("mouseup", {});
+	  canvas.dispatchEvent(mouseEvent);
+	}, false);
+	canvas.addEventListener("touchmove", function (e) {
+	  var touch = e.touches[0];
+	  var mouseEvent = new MouseEvent("mousemove", {
+	    clientX: touch.clientX,
+	    clientY: touch.clientY
+	  });
+	  canvas.dispatchEvent(mouseEvent);
+	}, false);
+
+	// Prevent scrolling when touching the canvas
+	document.body.addEventListener("touchstart", function (e) {
+	  if (e.target == canvas) {
+	    e.preventDefault();
+	  }
+	}, false);
+	document.body.addEventListener("touchend", function (e) {
+	  if (e.target == canvas) {
+	    e.preventDefault();
+	  }
+	}, false);
+	document.body.addEventListener("touchmove", function (e) {
+	  if (e.target == canvas) {
+	    e.preventDefault();
+	  }
+	}, false);
+}
+// Get the position of a touch relative to the canvas
+function getTouchPos(canvasDom, touchEvent) {
+  var rect = canvasDom.getBoundingClientRect();
+  return {
+    x: touchEvent.touches[0].clientX - rect.left,
+    y: touchEvent.touches[0].clientY - rect.top
+  };
+}
+function getMousePos(evt) {
+	var rect = canvas.getBoundingClientRect();
+	return {
+		x: evt.clientX - rect.left,
+		y: canvas.height - evt.clientY + rect.top
+	};
+}
+
+function get_url(url, proto="ws")
+{
+	// relevant when developing locally without uploading SPIFFS
+	var ip = '://192.168.1.72/'
+
+	if (window.location.hostname != "" && window.location.hostname != "localhost")
+		ip = "://" + window.location.hostname + '/';
+
+	return proto + ip + url;
+}
+
+function draw_data(json) {
+	var ctx = canvas.getContext("2d");
+
+	var width = json.width;
+	var height = json.height;
+
+	var off = 50;
+	var cw = canvas.width;
+	var a = (cw) / width;
+	var b = (cw) / height;
+
+	ctx.fillStyle = "#FFFFFF";
+	ctx.fillRect(0, 0, canvas.width, canvas.height / 3);
+
+	if (json.image) {
+		for (var y = 0; y < height; y++)
+			for (var x = 0; x < width; x++)
+			if (x + y * width < json.image.length) {
+				var c = json.image[x + y * width].toString(16);
+				ctx.fillStyle = "#" + c + c + c;
+				ctx.fillRect(x * a, canvas.height - y * b, a, b);
+			}
+	}
+
+	ctx.font = "16px Arial";
+	ctx.fillStyle = "#000000";
+	ctx.fillText(json.battery, a, off / 2);
+	ctx.fillText(json.heap, a, off / 2 + 20);
+
+	ctx.fillText(control.power, 200, off / 2);
+	ctx.fillText(control.steering, 350, off / 2);
+
+	if (mousedown != null) {
+		ctx.strokeStyle = "#9090FF";
+		ctx.beginPath();
+		ctx.arc(mousedown.x, canvas.height - mousedown.y,a,0,2*Math.PI);
+		ctx.stroke();
+
+		ctx.beginPath();
+		ctx.arc(mouse.x, canvas.height - mouse.y,a,0,2*Math.PI);
+		ctx.stroke();
+
+		ctx.moveTo(mousedown.x, canvas.height - mousedown.y);
+		ctx.lineTo(mouse.x, canvas.height - mouse.y);
+		ctx.stroke();
+	}
+}
+
+function ws_connect(url) {
+	if (ws != null)
+		return;
+
+	ws = new WebSocket(url);
+
+	ws.onopen = function()
+	{
+		ws.send("WATCHDOG");
+	};
+
+	ws.onmessage = function (evt)
+	{
+			var received_msg = evt.data;
+			data = JSON.parse(evt.data);
+
+			draw_data(data);
+	}
+
+	ws.onclose = function()
+	{
+		var url = ws.url;
+		ws = null;
+		setTimeout(ws_connect, 1000, url);
+	};
+
+	ws.onerror = function() {
+		var url = ws.url;
+		ws = null;
+		setTimeout(ws_connect, 1000, url);
+	}
+}
+
+function mouse_down(evt) {
+	mousedown = getMousePos(evt);
+	mouse = mousedown;
+	send_control();
+}
+
+function mouse_up(evt) {
+	mousedown = null;
+	mouse = null;
+	send_control();
+}
+
+function send_control() {
+	if (mousedown == null) {
+		control.power = 0;
+		control.steering = 0;
+	}
+
+	var ctrl = JSON.stringify(control);
+	ws.send(ctrl);
+  console.log("send");
+	if (mousedown != null)
+		setTimeout(send_control, 500);
+}
+
+function mouse_move(evt) {
+	if (mousedown == null)
+		return;
+	mouse = getMousePos(evt);
+	var dx = mouse.x - mousedown.x;
+	var dy = mouse.y - mousedown.y;
+	var l = Math.sqrt(dx * dx + dy * dy);
+	control.power = Math.max(-1, Math.min(2 * dy / canvas.width, 1.0));
+	control.steering = Math.max(-1, Math.min(2 * dx / canvas.width, 1.0));
+}
+
+</script>
+</body>
+
+</html>

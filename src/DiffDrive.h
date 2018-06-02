@@ -88,7 +88,7 @@ private:
 
     void setMotorSpeed(int A, int B, double a)
     {
-      uint16_t motor = (uint16_t)abs(a * _motorConst);
+      uint16_t motor = min((uint16_t)_motorConst, (uint16_t)abs(a * _motorConst));
       analogWrite(A, a > 0 ? motor : 0);
       analogWrite(B, a > 0 ? 0: motor);
     }
