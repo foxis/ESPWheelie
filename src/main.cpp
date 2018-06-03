@@ -19,8 +19,9 @@
 #define SS 16
 #define RESET 3
 
+
 EasyOTA OTA(ARDUINO_HOSTNAME);
-DiffDrive ddrive(MOTOR_A0, MOTOR_B0, MOTOR_A1, MOTOR_B1, WHEEL_BASE);
+Locomotion::Locomotion ddrive = Locomotion::DiffDrive(MOTOR_A0, MOTOR_B0, MOTOR_A1, MOTOR_B1, WHEEL_BASE);
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 ADNS3080 a3080(SS, RESET);
@@ -58,7 +59,7 @@ void setup() {
 	OTA.onMessage([](const String& msg, int line) {
 		S_printf("OTA message: %s", msg.c_str());
 	});
-	ddrive.init();
+	ddrive.begin();
 	a3080.begin();
 	SPIFFS.begin();
 
@@ -76,8 +77,7 @@ void setup() {
 			DynamicJsonBuffer jsonBuffer;
 			JsonObject &json = jsonBuffer.parseObject(cmd);
 
-			ddrive.setDiffSpeed(json["power"], json["steering"]);
-			last_updated = millis();
+			ddrive.setThrust(Locomotion::Quaternion(json["power"], 0, 0, json["steering"]));
 
 		} else if (type == WS_EVT_CONNECT) {
 			connected = true;
@@ -122,8 +122,5 @@ void loop() {
 		last_now = now;
 	}
 
-	if (now - last_updated > 2000) {
-		ddrive.setDiffSpeed(0, 0);
-		last_updated = now;
-	}
+	ddrive.loop(now);
 }
