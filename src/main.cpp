@@ -7,24 +7,22 @@
 #include "DiffDrive.h"
 #include <ArduinoJson.h>
 #include "AsyncJson.h"
-#include "adns3080.h"
+#include "sensors/ADNS3080.h"
 
 #define MOTOR_A0  5
 #define MOTOR_B0  4
 #define MOTOR_A1  2
 #define MOTOR_B1  0
 #define WHEEL_BASE 1.0
-#define IMG_WIDTH ADNS3080_PIXELS_X
-#define IMG_HEIGHT ADNS3080_PIXELS_Y
 #define SS 16
 #define RESET 3
 
 
 EasyOTA OTA(ARDUINO_HOSTNAME);
-Locomotion::Locomotion ddrive = Locomotion::DiffDrive(MOTOR_A0, MOTOR_B0, MOTOR_A1, MOTOR_B1, WHEEL_BASE);
+Locomotion::DiffDrive ddrive(MOTOR_A0, MOTOR_B0, MOTOR_A1, MOTOR_B1, WHEEL_BASE);
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
-ADNS3080 a3080(SS, RESET);
+Locomotion::ADNS3080 a3080(SS, RESET);
 bool connected = false;
 unsigned long last_updated = 0;
 
@@ -78,6 +76,7 @@ void setup() {
 			JsonObject &json = jsonBuffer.parseObject(cmd);
 
 			ddrive.setThrust(Locomotion::Quaternion(json["power"], 0, 0, json["steering"]));
+			ddrive.updated(millis());
 
 		} else if (type == WS_EVT_CONNECT) {
 			connected = true;
@@ -97,9 +96,10 @@ void loop() {
 	static unsigned long last_now = millis();
 
   OTA.loop(now);
+	ddrive.loop(now);
 
 	if (now - last_now > 20L && connected) {
-		static byte data[IMG_WIDTH * IMG_HEIGHT];
+		static byte data[ADNS3080_PIXELS_X * ADNS3080_PIXELS_Y];
 		a3080.frame_capture(data);
 		float voltage = analogRead(0) * 10.0 / 1024.0;
 
@@ -107,7 +107,7 @@ void loop() {
 		static char buffer[4000] = "";
 		char tmp[10] = "";
 		sprintf(buffer, "{\"battery\":%.2f,\"width\":%i,\"height\":%i,\"heap\":%i,\"image\":[%i",
-			voltage, IMG_WIDTH, IMG_HEIGHT, ESP.getFreeHeap(), (int)data[0]);
+			voltage, ADNS3080_PIXELS_X, ADNS3080_PIXELS_Y, ESP.getFreeHeap(), (int)data[0]);
 
 		for (int i = 1; i < sizeof(data); i++) {
 			//image.add((int)data[i]);
@@ -121,6 +121,4 @@ void loop() {
 
 		last_now = now;
 	}
-
-	ddrive.loop(now);
 }
