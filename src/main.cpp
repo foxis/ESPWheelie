@@ -4,10 +4,10 @@
 #include <SPIFFSEditor.h>
 #include <math.h>
 #include "wificonfig.h"
-#include "DiffDrive.h"
 #include <ArduinoJson.h>
 #include "AsyncJson.h"
-#include "sensors/ADNS3080.h"
+#include "devices/ADNS3080.h"
+#include "drives/DiffDrive.h"
 
 #define MOTOR_A0  5
 #define MOTOR_B0  4
@@ -58,7 +58,7 @@ void setup() {
 		S_printf("OTA message: %s", msg.c_str());
 	});
 	ddrive.begin();
-	a3080.begin();
+	a3080.begin(true);
 	SPIFFS.begin();
 
 	server.addHandler(&ws);
